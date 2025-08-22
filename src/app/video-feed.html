@@ -1,0 +1,7 @@
+<div class="video-container" *ngIf="mjpgUrl; else noip">
+  <img [src]="mjpgUrl" alt="PiCar-X Camera Feed" (error)="onError()" />
+</div>
+
+<ng-template #noip>
+  <p style="font-style: italic;">Enter a Pi IP above and click Connect to view the camera.</p>
+</ng-template>

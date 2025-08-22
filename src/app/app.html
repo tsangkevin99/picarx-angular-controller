@@ -1,0 +1,26 @@
+<h1>PiCar-X Controller</h1>
+
+<div style="display:flex; gap:0.75rem; align-items: center; margin-bottom: 1rem;">
+  <label for="pi-ip"><strong>Pi IP:</strong></label>
+  <input
+    id="pi-ip"
+    type="text"
+    [(ngModel)]="piIp"
+    (ngModelChange)="onPiIpChange($event)"
+    placeholder="Enter Pi IP address"
+    style="padding:0.4rem; width: 14rem;"
+  />
+  <button (click)="onConnectClick()">Connect</button>
+  <button (click)="onExitServerClick()" style="margin-left:auto;">Exit Server</button>
+</div>
+
+<!-- Video feed (pulls from http://<piIp>:9000/video_feed) -->
+<app-video-feed [piIp]="piIp"></app-video-feed>
+
+<div style="margin-top: 16px; font-family: monospace;">
+  <p>Throttle: {{ controlState.throttle | number:'1.2-2' }}</p>
+  <p>Steer: {{ controlState.steer | number:'1.2-2' }}</p>
+  <p>RX (Right Stick X): {{ controlState.rx | number:'1.2-2' }}</p>
+  <p>RY (Right Stick Y): {{ controlState.ry | number:'1.2-2' }}</p>
+  <p><small>Use WASD keys or Xbox controller. IP is persisted in your browser.</small></p>
+</div>

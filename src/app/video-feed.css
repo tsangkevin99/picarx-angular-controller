@@ -1,0 +1,11 @@
+.video-container {
+  width: 640px;
+  max-width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.video-container img {
+  width: 100%;
+  display: block;
+}
