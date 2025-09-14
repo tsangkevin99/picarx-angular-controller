@@ -10,8 +10,8 @@ import { VideoFeed } from './video-feed';
   templateUrl: './app.html',
 })
 export class App implements OnDestroy {
-  piIp = ''; // Enter your Pi IP here dynamically
-  controlState = { throttle: 0, steer: 0, rx: 0, ry: 0 };
+  piIp = ''; // dynamically entered in UI
+  controlState = { throttle: 0, steer: 0, rx: 0, ry: 0, button_y : false, button_x: false};
   private ws?: WebSocket;
   private keysPressed = new Set<string>();
   private gamepadIndex: number | null = null;
@@ -23,9 +23,19 @@ export class App implements OnDestroy {
   ngOnDestroy() {
     this.disconnectWebSocket();
   }
+
+  // Called when input changes
   onPiIpChange(event: any) {
     this.piIp = event.target.value;
+  }
+
+  onConnectClick() {
     this.connectWebSocket();
+  }
+
+  onExitServerClick() {
+    this.disconnectWebSocket();
+    console.log('WebSocket disconnected');
   }
 
   connectWebSocket() {
@@ -40,15 +50,6 @@ export class App implements OnDestroy {
 
   disconnectWebSocket() {
     if (this.ws) { this.ws.close(); this.ws = undefined; }
-  }
-
-  onConnectClick() {
-    this.connectWebSocket();
-  }
-
-  onExitServerClick() {
-    this.disconnectWebSocket();
-    console.log('WebSocket server exited.');
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -81,28 +82,43 @@ export class App implements OnDestroy {
     }
   }
 
-  // Xbox / gamepad loop
-  gamepadLoop() {
-    const gamepads = navigator.getGamepads();
-    if (gamepads) {
-      for (let i = 0; i < gamepads.length; i++) {
-        const gp = gamepads[i];
-        if (gp) {
-          this.gamepadIndex = i;
+// Gamepad / Xbox controller loop
+gamepadLoop() {
+  const gamepads = navigator.getGamepads();
+  if (gamepads) {
+    for (let i = 0; i < gamepads.length; i++) {
+      const gp = gamepads[i];
+      if (gp) {
+        this.gamepadIndex = i;
 
-          // Right stick: control camera / head
-          this.controlState.rx = gp.axes[2] ?? 0;
-          this.controlState.ry = gp.axes[3] ?? 0;
+        // Left stick for steering
+        const lx = gp.axes[0] ?? 0;  // left stick horizontal
+        this.controlState.steer = Math.abs(lx) > 0.1 ? lx : 0;  // deadzone
 
-          // Triggers: throttle
-          const rt = gp.buttons[7]?.value ?? 0; // right trigger forward
-          const lt = gp.buttons[6]?.value ?? 0; // left trigger backward
-          this.controlState.throttle = rt ? rt : lt ? -lt : this.controlState.throttle;
+        // Right stick for camera/head
+        const rx = gp.axes[2] ?? 0; // right stick horizontal
+        const ry = gp.axes[3] ?? 0; // right stick vertical
+        this.controlState.rx = Math.abs(rx) > 0.1 ? rx : 0;  // deadzone
+        this.controlState.ry = Math.abs(ry) > 0.1 ? ry : 0;
 
-          this.sendControlState();
-        }
+        // Triggers for throttle
+        const rt = gp.buttons[7]?.value ?? 0;  // right trigger forward
+        const lt = gp.buttons[6]?.value ?? 0;  // left trigger backward
+        if (rt > 0.1) this.controlState.throttle = rt;
+        else if (lt > 0.1) this.controlState.throttle = -lt;
+        else this.controlState.throttle = 0;  // reset if no trigger pressed
+
+        // Buttons for head reset
+        this.controlState.button_y = gp.buttons[3]?.pressed ?? false; // Y button
+        this.controlState.button_x = gp.buttons[2]?.pressed ?? false; // X button
+
+        // Send updated control state to backend
+        this.sendControlState();
       }
     }
-    window.requestAnimationFrame(() => this.gamepadLoop());
   }
+  window.requestAnimationFrame(() => this.gamepadLoop());
+}
+
+
 }
