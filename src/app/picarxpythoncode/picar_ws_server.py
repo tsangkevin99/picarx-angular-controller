@@ -8,7 +8,9 @@ from picamera2 import Picamera2
 import cv2
 import time
 
+# ----------------------
 # Initialize PiCar-X and camera
+# ----------------------
 car = Picarx()
 picam2 = Picamera2()
 picam2.start()
@@ -16,7 +18,7 @@ picam2.start()
 # Driving mode: "manual" or "auto"
 mode = "manual"
 
-# PID constants (tune these!)
+# PID constants (for future use)
 Kp, Ki, Kd = 0.5, 0.0, 0.1
 pid_integral = 0
 pid_last_error = 0
@@ -26,11 +28,19 @@ pid_last_time = time.time()
 pan_angle = 0
 tilt_angle = 0
 
-# Calibrated default head positions
-DEFAULT_PAN = -0.5    
-DEFAULT_TILT = 7.5  
+# Default camera positions
+DEFAULT_PAN = -0.5
+DEFAULT_TILT = 7.5
 
+car.set_cam_pan_angle(DEFAULT_PAN)
+car.set_cam_tilt_angle(DEFAULT_TILT)
+
+# Track previous button state for rising-edge detection
+prev_button_x = False
+
+# ----------------------
 # Flask app for video feed
+# ----------------------
 app = Flask(__name__)
 
 def get_camera_frame():
@@ -53,15 +63,15 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 # ----------------------
-# MANUAL MODE FUNCTIONS
+# Manual driving
 # ----------------------
 def drive_manual(throttle, steer, rx, ry, reset_head=False):
     global pan_angle, tilt_angle
-    
-    # Reset camera if button pressed
+
     if reset_head:
         pan_angle = DEFAULT_PAN
         tilt_angle = DEFAULT_TILT
+
     # Car driving
     servo_val = steer * 35  # -35° to +35°
     speed_val = int(throttle * 100)
@@ -69,80 +79,65 @@ def drive_manual(throttle, steer, rx, ry, reset_head=False):
     car.set_motor_speed(1, speed_val)
     car.set_motor_speed(2, -speed_val)
 
-    # Camera pan/tilt (discrete, step-based like i/k/j/l)
+    # Camera pan/tilt
     step = 0.5
-    if rx > 0.5:   # right stick pushed right
+    if rx > 0.5:
         pan_angle = min(pan_angle + step, 35)
-    elif rx < -0.5:  # pushed left
+    elif rx < -0.5:
         pan_angle = max(pan_angle - step, -35)
 
-    if ry > 0.5:   # pushed up
-        tilt_angle = min(tilt_angle + step, 35)
-    elif ry < -0.5:  # pushed down
-        tilt_angle = max(tilt_angle - step, -35)
+    if ry > 0.5:
+        tilt_angle = min(tilt_angle - step, 35)
+    elif ry < -0.5:
+        tilt_angle = max(tilt_angle + step, -35)
 
     car.set_cam_pan_angle(pan_angle)
     car.set_cam_tilt_angle(tilt_angle)
-    print(f"Tilt: {tilt_angle}, Pan: {pan_angle}")
-
 
 # ----------------------
-# AUTO MODE FUNCTIONS
+# Auto driving (placeholder)
 # ----------------------
-def pid_controller(desired_angle, current_angle):
-    global pid_integral, pid_last_error, pid_last_time
-
-    now = time.time()
-    dt = now - pid_last_time if pid_last_time else 0.01
-
-    error = desired_angle - current_angle
-    pid_integral += error * dt
-    derivative = (error - pid_last_error) / dt if dt > 0 else 0
-
-    output = Kp * error + Ki * pid_integral + Kd * derivative
-
-    pid_last_error = error
-    pid_last_time = now
-    return output
-
 def drive_auto():
-    frame = get_camera_frame()
-
-    # TODO: Replace with AI model prediction
-    # e.g., model.predict(frame)
-    obstacle_detected = False  
-
-    if not obstacle_detected:
-        # Keep driving straight
-        correction = pid_controller(desired_angle=0, current_angle=0)  
-        car.set_dir_servo_angle(correction)
-        car.forward(50)
-    else:
-        # Stop or avoid obstacle
-        car.stop()
+    # For now, just go straight
+    car.set_dir_servo_angle(0)
+    car.forward(50)
 
 # ----------------------
-# WEBSOCKET HANDLER
+# WebSocket handler
 # ----------------------
 async def handler(websocket):
-    global mode
+    global mode, prev_button_x
 
     print("Client connected")
     try:
         async for message in websocket:
             data = json.loads(message)
 
-            # Mode toggle with controller button
-            if data.get("toggle_mode", False):
-                mode = "auto" if mode == "manual" else "manual"
-                print(f"Switched to {mode.upper()} mode")
-
+            # Read controls
             throttle = max(-1, min(data.get("throttle", 0), 1))
             steer = max(-1, min(data.get("steer", 0), 1))
             rx = data.get("rx", 0)
             ry = data.get("ry", 0)
-            reset_head = data.get("button_y", False) or data.get("button_x", False)
 
+            # Buttons
+            button_x = data.get("button_x", False)
+            button_y = data.get("button_y", False)
+
+            # Toggle mode on X button rising edge
+            if button_x and not prev_button_x:
+                mode = "auto" if mode == "manual" else "manual"
+                print(f"Switched to {mode.upper()} mode")
+            prev_button_x = button_x
+            # Check for toggle from front-end button
+            if data.get("toggle_mode", False):
+                mode = "auto" if mode == "manual" else "manual"
+                print(f"Switched to {mode.upper()} mode")
+
+
+            # Reset camera if Y pressed
+            reset_head = button_y
+
+            # Drive
             if mode == "manual":
                 drive_manual(throttle, steer, rx, ry, reset_head)
             elif mode == "auto":
@@ -152,14 +147,23 @@ async def handler(websocket):
         print("Connection handler failed:", e)
         car.stop()
 
+# ----------------------
+# WebSocket server
+# ----------------------
 async def ws_main():
     async with websockets.serve(handler, "0.0.0.0", 8765):
         print("Starting PiCar-X WebSocket server on port 8765")
         await asyncio.Future()  # run forever
 
+# ----------------------
+# Run Flask in a thread
+# ----------------------
 def run_flask():
     app.run(host='0.0.0.0', port=9000, threaded=True)
 
+# ----------------------
+# Main
+# ----------------------
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()

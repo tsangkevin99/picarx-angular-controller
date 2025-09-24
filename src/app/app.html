@@ -12,9 +12,11 @@
   />
   <button (click)="onConnectClick()">Connect</button>
   <button (click)="onExitServerClick()" style="margin-left:auto;">Exit Server</button>
+  <button (click)="toggleDrivingMode()" style="margin-left:1rem;">
+    Mode: {{ isAutoMode ? 'Auto' : 'Manual' }}
+  </button>
 </div>
 
-<!-- Video feed (pulls from http://<piIp>:9000/video_feed) -->
 <app-video-feed [piIp]="piIp"></app-video-feed>
 
 <div style="margin-top: 16px; font-family: monospace;">
@@ -22,5 +24,5 @@
   <p>Steer: {{ controlState.steer | number:'1.2-2' }}</p>
   <p>RX (Right Stick X): {{ controlState.rx | number:'1.2-2' }}</p>
   <p>RY (Right Stick Y): {{ controlState.ry | number:'1.2-2' }}</p>
-  <p><small>Use WASD keys or Xbox controller. IP is persisted in your browser.</small></p>
+  <p><small>Use WASD keys or Xbox/console controller. IP is persisted in your browser.</small></p>
 </div>
